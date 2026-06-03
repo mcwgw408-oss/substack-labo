@@ -63,6 +63,18 @@ h1 {
   line-height: 0.95;
 }
 
+.subtitle {
+  margin: 12px 0 0;
+  color: #5c5048;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.counter-grid {
+  display: flex;
+  gap: 10px;
+}
+
 .counter {
   display: grid;
   place-items: center;
@@ -82,6 +94,11 @@ h1 {
 .counter small {
   color: #78695f;
   font-weight: 700;
+}
+
+.favorite-counter {
+  background: #fff7dd;
+  border-color: #e4c978;
 }
 
 .workspace {
@@ -118,6 +135,22 @@ h1 {
   font-size: 1.15rem;
 }
 
+fieldset {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  margin: 0;
+  padding: 0 0 6px;
+  border: 0;
+}
+
+legend {
+  margin-bottom: 10px;
+  color: #8a4b3a;
+  font-size: 0.84rem;
+  font-weight: 900;
+}
+
 label {
   display: grid;
   gap: 7px;
@@ -145,6 +178,19 @@ textarea {
   resize: vertical;
   min-height: 84px;
   padding: 12px;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+
+.check-row input {
+  width: 20px;
+  min-height: 20px;
+  accent-color: #d69e2e;
 }
 
 input:focus,
@@ -289,6 +335,17 @@ textarea:focus {
   color: #285f5c;
 }
 
+.favorite-button {
+  background: #fffaf0;
+  color: #9b6a18;
+}
+
+.favorite-button.is-favorite {
+  background: #f7c948;
+  border-color: #d9a515;
+  color: #3d2d08;
+}
+
 .entry-meta {
   justify-content: flex-start;
   flex-wrap: wrap;
@@ -307,6 +364,23 @@ textarea:focus {
   font-size: 0.88rem;
   font-weight: 800;
   text-decoration: none;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-list span {
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid #ddd0c2;
+  border-radius: 8px;
+  background: #fff8f5;
+  color: #7c3f31;
+  font-size: 0.82rem;
+  font-weight: 800;
 }
 
 .entry-detail {
@@ -364,8 +438,23 @@ textarea:focus {
     gap: 6px;
   }
 
+  .counter-grid {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
   .entry-form,
   .entries-panel {
     padding: 14px;
+  }
+
+  .card-actions {
+    gap: 6px;
+  }
+
+  .icon-button {
+    width: 36px;
+    height: 36px;
   }
 }
