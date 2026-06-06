@@ -1,409 +1,910 @@
 import { StrictMode } from 'react';
-import type { FormEvent } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ExternalLink, Pencil, Plus, Save, Search, Star, Trash2, X } from 'lucide-react';
+import {
+  BookOpenText,
+  Edit3,
+  ExternalLink,
+  FileText,
+  Home,
+  Lightbulb,
+  Newspaper,
+  Pencil,
+  Plus,
+  Save,
+  Search,
+  Send,
+  Star,
+  StickyNote,
+  Trash2,
+  UserCheck,
+  Users,
+  X,
+} from 'lucide-react';
 import './styles.css';
 
-type Creator = {
+type PageKey = 'home' | 'notes' | 'articles' | 'substackPosts' | 'follows' | 'followers' | 'ideas' | 'quickMemos';
+type WritingKey = 'notes' | 'articles' | 'substackPosts';
+type PeopleKey = 'follows' | 'followers';
+
+type WritingStatus = '候補' | '執筆中' | '予約投稿' | '下書き' | '投稿完了';
+type IdeaCategory = 'アイデア保管' | 'Threads候補' | 'note候補（回復期）' | 'note候補（AI実験室）' | 'X候補' | 'Substack候補';
+
+type WritingItem = {
+  id: string;
+  title: string;
+  status: WritingStatus;
+  publishDate: string;
+  publishUrl: string;
+  memo: string;
+};
+
+type PersonItem = {
   id: string;
   senderName: string;
-  substackUrl: string;
+  url: string;
   genre: string;
+  rating: 1 | 2 | 3;
   followedAt: string;
-  followReason: string;
   interestingPoint: string;
   pointsToImitate: string;
   learned: string;
+  idea: string;
   memo: string;
-  favorite: boolean;
-  tags: string;
 };
 
-type CreatorForm = Omit<Creator, 'id'>;
-
-type LegacyEntry = {
-  id?: string;
-  discoveredAt?: string;
-  senderName?: string;
-  url?: string;
-  genre?: string;
-  reason?: string;
-  pointsToImitate?: string;
-  memo?: string;
+type IdeaItem = {
+  id: string;
+  category: IdeaCategory;
+  title: string;
+  memo: string;
 };
 
-const storageKey = 'substack-labo-entries';
+type QuickMemoItem = {
+  id: string;
+  title: string;
+  memo: string;
+  createdAt: string;
+};
+
+type AppData = {
+  writings: Record<WritingKey, WritingItem[]>;
+  people: Record<PeopleKey, PersonItem[]>;
+  ideas: IdeaItem[];
+  quickMemos: QuickMemoItem[];
+};
+
+const storageKey = 'substack-labo-workspace-v2';
+
+const writingStatuses: WritingStatus[] = ['候補', '執筆中', '予約投稿', '下書き', '投稿完了'];
+const ideaCategories: IdeaCategory[] = [
+  'アイデア保管',
+  'Threads候補',
+  'note候補（回復期）',
+  'note候補（AI実験室）',
+  'X候補',
+  'Substack候補',
+];
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-const emptyForm: CreatorForm = {
+const emptyWriting = (): Omit<WritingItem, 'id'> => ({
+  title: '',
+  status: '候補',
+  publishDate: '',
+  publishUrl: '',
+  memo: '',
+});
+
+const emptyPerson = (): Omit<PersonItem, 'id'> => ({
   senderName: '',
-  substackUrl: '',
+  url: '',
   genre: '',
+  rating: 1,
   followedAt: today(),
-  followReason: '',
   interestingPoint: '',
   pointsToImitate: '',
   learned: '',
+  idea: '',
   memo: '',
-  favorite: false,
-  tags: '',
-};
-
-const normalizeCreator = (entry: Partial<Creator> & LegacyEntry): Creator => ({
-  id: entry.id || crypto.randomUUID(),
-  senderName: entry.senderName || '',
-  substackUrl: entry.substackUrl || entry.url || '',
-  genre: entry.genre || '',
-  followedAt: entry.followedAt || entry.discoveredAt || today(),
-  followReason: entry.followReason || entry.reason || '',
-  interestingPoint: entry.interestingPoint || '',
-  pointsToImitate: entry.pointsToImitate || '',
-  learned: entry.learned || '',
-  memo: entry.memo || '',
-  favorite: Boolean(entry.favorite),
-  tags: entry.tags || '',
 });
 
-const loadCreators = (): Creator[] => {
-  try {
-    const raw = localStorage.getItem(storageKey);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as Array<Partial<Creator> & LegacyEntry>;
-    return parsed.map(normalizeCreator);
-  } catch {
-    return [];
-  }
+const emptyIdea = (): Omit<IdeaItem, 'id'> => ({
+  category: 'アイデア保管',
+  title: '',
+  memo: '',
+});
+
+const emptyQuickMemo = (): Omit<QuickMemoItem, 'id'> => ({
+  title: '',
+  memo: '',
+  createdAt: today(),
+});
+
+const emptyData = (): AppData => ({
+  writings: {
+    notes: [],
+    articles: [],
+    substackPosts: [],
+  },
+  people: {
+    follows: [],
+    followers: [],
+  },
+  ideas: [],
+  quickMemos: [],
+});
+
+const navigationItems: Array<{ key: PageKey; label: string; icon: typeof Home }> = [
+  { key: 'home', label: 'トップ', icon: Home },
+  { key: 'notes', label: 'ノート', icon: BookOpenText },
+  { key: 'articles', label: '記事', icon: FileText },
+  { key: 'substackPosts', label: 'Substack投稿', icon: Newspaper },
+  { key: 'follows', label: 'フォロー', icon: UserCheck },
+  { key: 'followers', label: 'フォロワー', icon: Users },
+  { key: 'ideas', label: 'アイデア保管', icon: Lightbulb },
+  { key: 'quickMemos', label: '仮メモ', icon: StickyNote },
+];
+
+const writingPageLabels: Record<WritingKey, string> = {
+  notes: 'ノートページ',
+  articles: '記事ページ',
+  substackPosts: 'Substack投稿ページ',
+};
+
+const peoplePageLabels: Record<PeopleKey, string> = {
+  follows: 'フォローページ',
+  followers: 'フォロワーページ',
 };
 
 function App() {
-  const [creators, setCreators] = useStoredCreators();
-  const [form, setForm] = useState<CreatorForm>(emptyForm);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [data, setData] = useStoredData();
+  const [activePage, setActivePage] = useState<PageKey>('home');
   const [query, setQuery] = useState('');
 
-  const filteredCreators = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) return creators;
-
-    return creators.filter((creator) => {
-      const target = [
-        creator.senderName,
-        creator.substackUrl,
-        creator.genre,
-        creator.followedAt,
-        creator.followReason,
-        creator.interestingPoint,
-        creator.pointsToImitate,
-        creator.learned,
-        creator.memo,
-        creator.tags,
-      ]
-        .join(' ')
-        .toLowerCase();
-      return target.includes(normalizedQuery);
-    });
-  }, [creators, query]);
-
-  const favoriteCount = creators.filter((creator) => creator.favorite).length;
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!form.senderName.trim() && !form.substackUrl.trim()) return;
-
-    const cleanedForm: CreatorForm = {
-      senderName: form.senderName.trim(),
-      substackUrl: form.substackUrl.trim(),
-      genre: form.genre.trim(),
-      followedAt: form.followedAt,
-      followReason: form.followReason.trim(),
-      interestingPoint: form.interestingPoint.trim(),
-      pointsToImitate: form.pointsToImitate.trim(),
-      learned: form.learned.trim(),
-      memo: form.memo.trim(),
-      favorite: form.favorite,
-      tags: form.tags.trim(),
+  const totals = useMemo(() => {
+    const writingTotal = Object.values(data.writings).reduce((sum, items) => sum + items.length, 0);
+    const peopleTotal = Object.values(data.people).reduce((sum, items) => sum + items.length, 0);
+    return {
+      writingTotal,
+      peopleTotal,
+      ideaTotal: data.ideas.length,
+      quickMemoTotal: data.quickMemos.length,
+      completedTotal: Object.values(data.writings)
+        .flat()
+        .filter((item) => item.status === '投稿完了').length,
     };
-
-    if (editingId) {
-      setCreators((current) =>
-        current.map((creator) => (creator.id === editingId ? { ...cleanedForm, id: editingId } : creator)),
-      );
-      setEditingId(null);
-    } else {
-      setCreators((current) => [{ ...cleanedForm, id: crypto.randomUUID() }, ...current]);
-    }
-
-    setForm({ ...emptyForm, followedAt: cleanedForm.followedAt });
-  };
-
-  const updateField = <Field extends keyof CreatorForm>(field: Field, value: CreatorForm[Field]) => {
-    setForm((current) => ({ ...current, [field]: value }));
-  };
-
-  const startEditing = (creator: Creator) => {
-    setEditingId(creator.id);
-    setForm({
-      senderName: creator.senderName,
-      substackUrl: creator.substackUrl,
-      genre: creator.genre,
-      followedAt: creator.followedAt,
-      followReason: creator.followReason,
-      interestingPoint: creator.interestingPoint,
-      pointsToImitate: creator.pointsToImitate,
-      learned: creator.learned,
-      memo: creator.memo,
-      favorite: creator.favorite,
-      tags: creator.tags,
-    });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const cancelEditing = () => {
-    setEditingId(null);
-    setForm(emptyForm);
-  };
-
-  const deleteCreator = (id: string) => {
-    setCreators((current) => current.filter((creator) => creator.id !== id));
-    if (editingId === id) {
-      cancelEditing();
-    }
-  };
-
-  const toggleFavorite = (id: string) => {
-    setCreators((current) =>
-      current.map((creator) => (creator.id === id ? { ...creator, favorite: !creator.favorite } : creator)),
-    );
-  };
+  }, [data]);
 
   return (
     <main className="app-shell">
-      <section className="top-bar">
+      <header className="top-bar">
         <div>
-          <p className="eyebrow">Creator database</p>
+          <p className="eyebrow">Substack production workspace</p>
           <h1>Substack Labo</h1>
-          <p className="subtitle">Substack発信者データベース</p>
+          <p className="subtitle">制作、発信者、候補メモをまとめて管理する場所</p>
         </div>
-        <div className="counter-grid" aria-label="登録状況">
-          <div className="counter">
-            <span>{creators.length}</span>
-            <small>登録</small>
-          </div>
-          <div className="counter favorite-counter">
-            <span>{favoriteCount}</span>
-            <small>★</small>
-          </div>
+        <div className="summary-strip" aria-label="全体サマリー">
+          <SummaryStat label="制作" value={totals.writingTotal} />
+          <SummaryStat label="人" value={totals.peopleTotal} />
+          <SummaryStat label="案" value={totals.ideaTotal} />
         </div>
-      </section>
+      </header>
 
-      <section className="workspace">
-        <form className="entry-form" onSubmit={handleSubmit}>
-          <div className="form-heading">
-            {editingId ? <Pencil size={20} aria-hidden="true" /> : <Plus size={20} aria-hidden="true" />}
-            <h2>{editingId ? '発信者を編集' : '発信者を登録'}</h2>
-          </div>
-
-          <fieldset>
-            <legend>基本情報</legend>
-
-            <label>
-              発信者名
-              <input
-                type="text"
-                value={form.senderName}
-                onChange={(event) => updateField('senderName', event.target.value)}
-                placeholder="例: Sakura Notes"
-              />
-            </label>
-
-            <label>
-              Substack URL
-              <input
-                type="url"
-                value={form.substackUrl}
-                onChange={(event) => updateField('substackUrl', event.target.value)}
-                placeholder="https://example.substack.com"
-              />
-            </label>
-
-            <label>
-              ジャンル
-              <input
-                type="text"
-                value={form.genre}
-                onChange={(event) => updateField('genre', event.target.value)}
-                placeholder="エッセイ、ビジネス、創作など"
-              />
-            </label>
-
-            <label>
-              フォロー日
-              <input
-                type="date"
-                value={form.followedAt}
-                onChange={(event) => updateField('followedAt', event.target.value)}
-              />
-            </label>
-          </fieldset>
-
-          <fieldset>
-            <legend>観察メモ</legend>
-
-            <label>
-              フォローした理由
-              <textarea
-                value={form.followReason}
-                onChange={(event) => updateField('followReason', event.target.value)}
-                rows={3}
-              />
-            </label>
-
-            <label>
-              気になったポイント
-              <textarea
-                value={form.interestingPoint}
-                onChange={(event) => updateField('interestingPoint', event.target.value)}
-                rows={3}
-              />
-            </label>
-
-            <label>
-              真似したいポイント
-              <textarea
-                value={form.pointsToImitate}
-                onChange={(event) => updateField('pointsToImitate', event.target.value)}
-                rows={3}
-              />
-            </label>
-
-            <label>
-              学んだこと
-              <textarea value={form.learned} onChange={(event) => updateField('learned', event.target.value)} rows={3} />
-            </label>
-
-            <label>
-              メモ
-              <textarea value={form.memo} onChange={(event) => updateField('memo', event.target.value)} rows={4} />
-            </label>
-          </fieldset>
-
-          <fieldset>
-            <legend>整理用</legend>
-
-            <label className="check-row">
-              <input
-                type="checkbox"
-                checked={form.favorite}
-                onChange={(event) => updateField('favorite', event.target.checked)}
-              />
-              お気に入り
-            </label>
-
-            <label>
-              タグ
-              <input
-                type="text"
-                value={form.tags}
-                onChange={(event) => updateField('tags', event.target.value)}
-                placeholder="例: 文章術, 有料導線, 海外"
-              />
-            </label>
-          </fieldset>
-
-          <div className="form-actions">
-            <button className="primary-button" type="submit">
-              <Save size={18} aria-hidden="true" />
-              {editingId ? '更新' : '登録'}
-            </button>
-            {editingId && (
-              <button className="secondary-button" type="button" onClick={cancelEditing}>
-                <X size={18} aria-hidden="true" />
-                キャンセル
+      <div className="app-layout">
+        <nav className="side-nav" aria-label="ページ">
+          {navigationItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                className={activePage === item.key ? 'active' : ''}
+                key={item.key}
+                type="button"
+                onClick={() => setActivePage(item.key)}
+              >
+                <Icon size={18} aria-hidden="true" />
+                {item.label}
               </button>
-            )}
-          </div>
-        </form>
+            );
+          })}
+        </nav>
 
-        <section className="entries-panel">
-          <div className="search-box">
-            <Search size={18} aria-hidden="true" />
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="発信者名、ジャンル、タグ、メモを検索"
+        <section className="page-surface">
+          {activePage === 'home' && <HomePage data={data} totals={totals} setActivePage={setActivePage} />}
+          {isWritingPage(activePage) && (
+            <WritingPage
+              items={data.writings[activePage]}
+              pageKey={activePage}
+              query={query}
+              setQuery={setQuery}
+              setItems={(items) =>
+                setData((current) => ({
+                  ...current,
+                  writings: { ...current.writings, [activePage]: items },
+                }))
+              }
             />
-          </div>
-
-          <div className="entries-list">
-            {filteredCreators.length === 0 ? (
-              <div className="empty-state">
-                <h2>まだ発信者が登録されていません</h2>
-                <p>フォローしているSubstack発信者を登録して、観察メモを育てていきましょう。</p>
-              </div>
-            ) : (
-              filteredCreators.map((creator) => (
-                <article className="entry-card" key={creator.id}>
-                  <div className="entry-card-header">
-                    <div>
-                      <time>フォロー日 {creator.followedAt}</time>
-                      <h2>{creator.senderName || '名前未入力'}</h2>
-                    </div>
-                    <div className="card-actions">
-                      <button
-                        className={`icon-button favorite-button ${creator.favorite ? 'is-favorite' : ''}`}
-                        type="button"
-                        onClick={() => toggleFavorite(creator.id)}
-                        aria-label={creator.favorite ? 'お気に入りを外す' : 'お気に入りにする'}
-                      >
-                        <Star size={18} aria-hidden="true" />
-                      </button>
-                      <button className="icon-button edit-button" type="button" onClick={() => startEditing(creator)} aria-label="編集">
-                        <Pencil size={18} aria-hidden="true" />
-                      </button>
-                      <button className="icon-button" type="button" onClick={() => deleteCreator(creator.id)} aria-label="削除">
-                        <Trash2 size={18} aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="entry-meta">
-                    {creator.genre && <span>{creator.genre}</span>}
-                    {creator.substackUrl && (
-                      <a href={creator.substackUrl} target="_blank" rel="noreferrer">
-                        <ExternalLink size={15} aria-hidden="true" />
-                        Substackを開く
-                      </a>
-                    )}
-                  </div>
-
-                  {creator.tags && (
-                    <div className="tag-list" aria-label="タグ">
-                      {creator.tags.split(',').map((tag) => {
-                        const trimmedTag = tag.trim();
-                        return trimmedTag ? <span key={trimmedTag}>{trimmedTag}</span> : null;
-                      })}
-                    </div>
-                  )}
-
-                  <EntryDetail label="フォローした理由" value={creator.followReason} />
-                  <EntryDetail label="気になったポイント" value={creator.interestingPoint} />
-                  <EntryDetail label="真似したいポイント" value={creator.pointsToImitate} />
-                  <EntryDetail label="学んだこと" value={creator.learned} />
-                  <EntryDetail label="メモ" value={creator.memo} />
-                </article>
-              ))
-            )}
-          </div>
+          )}
+          {isPeoplePage(activePage) && (
+            <PeoplePage
+              items={data.people[activePage]}
+              pageKey={activePage}
+              query={query}
+              setQuery={setQuery}
+              setItems={(items) =>
+                setData((current) => ({
+                  ...current,
+                  people: { ...current.people, [activePage]: items },
+                }))
+              }
+            />
+          )}
+          {activePage === 'ideas' && (
+            <IdeasPage items={data.ideas} query={query} setQuery={setQuery} setItems={(ideas) => setData((current) => ({ ...current, ideas }))} />
+          )}
+          {activePage === 'quickMemos' && (
+            <QuickMemosPage
+              items={data.quickMemos}
+              query={query}
+              setQuery={setQuery}
+              setItems={(quickMemos) => setData((current) => ({ ...current, quickMemos }))}
+            />
+          )}
         </section>
-      </section>
+      </div>
     </main>
   );
 }
 
-function EntryDetail({ label, value }: { label: string; value: string }) {
+function HomePage({
+  data,
+  totals,
+  setActivePage,
+}: {
+  data: AppData;
+  totals: { writingTotal: number; peopleTotal: number; ideaTotal: number; quickMemoTotal: number; completedTotal: number };
+  setActivePage: (page: PageKey) => void;
+}) {
+  const recentWritings = Object.entries(data.writings)
+    .flatMap(([key, items]) => items.map((item) => ({ ...item, pageKey: key as WritingKey })))
+    .slice(0, 5);
+
+  return (
+    <div className="home-grid">
+      <section className="overview-band">
+        <SummaryStat label="制作メモ" value={totals.writingTotal} />
+        <SummaryStat label="投稿完了" value={totals.completedTotal} />
+        <SummaryStat label="フォロー/フォロワー" value={totals.peopleTotal} />
+        <SummaryStat label="アイデア" value={totals.ideaTotal} />
+        <SummaryStat label="仮メモ" value={totals.quickMemoTotal} />
+      </section>
+
+      <section className="quick-links">
+        {navigationItems
+          .filter((item) => item.key !== 'home')
+          .map((item) => {
+            const Icon = item.icon;
+            return (
+              <button key={item.key} type="button" onClick={() => setActivePage(item.key)}>
+                <Icon size={20} aria-hidden="true" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+      </section>
+
+      <section className="summary-section">
+        <div className="section-title">
+          <Send size={20} aria-hidden="true" />
+          <h2>制作のまとめ</h2>
+        </div>
+        <div className="status-grid">
+          {writingStatuses.map((status) => (
+            <SummaryStat
+              key={status}
+              label={status}
+              value={Object.values(data.writings)
+                .flat()
+                .filter((item) => item.status === status).length}
+            />
+          ))}
+        </div>
+      </section>
+
+      <section className="summary-section">
+        <div className="section-title">
+          <Edit3 size={20} aria-hidden="true" />
+          <h2>最近の制作</h2>
+        </div>
+        {recentWritings.length === 0 ? (
+          <p className="muted">まだ制作メモがありません。</p>
+        ) : (
+          <div className="compact-list">
+            {recentWritings.map((item) => (
+              <button key={item.id} type="button" onClick={() => setActivePage(item.pageKey)}>
+                <strong>{item.title || 'タイトル未入力'}</strong>
+                <span>
+                  {writingPageLabels[item.pageKey]} / {item.status}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function WritingPage({
+  pageKey,
+  items,
+  setItems,
+  query,
+  setQuery,
+}: {
+  pageKey: WritingKey;
+  items: WritingItem[];
+  setItems: (items: WritingItem[]) => void;
+  query: string;
+  setQuery: (query: string) => void;
+}) {
+  const [form, setForm] = useState<Omit<WritingItem, 'id'>>(emptyWriting);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const filteredItems = filterItems(items, query, (item) => [item.title, item.status, item.publishDate, item.publishUrl, item.memo]);
+
+  const save = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!form.title.trim() && !form.memo.trim()) return;
+
+    const cleaned = {
+      title: form.title.trim(),
+      status: form.status,
+      publishDate: form.publishDate,
+      publishUrl: form.publishUrl.trim(),
+      memo: form.memo.trim(),
+    };
+
+    if (editingId) {
+      setItems(items.map((item) => (item.id === editingId ? { ...cleaned, id: editingId } : item)));
+      setEditingId(null);
+    } else {
+      setItems([{ ...cleaned, id: crypto.randomUUID() }, ...items]);
+    }
+    setForm(emptyWriting());
+  };
+
+  const edit = (item: WritingItem) => {
+    setEditingId(item.id);
+    setForm({
+      title: item.title,
+      status: item.status,
+      publishDate: item.publishDate,
+      publishUrl: item.publishUrl,
+      memo: item.memo,
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const cancel = () => {
+    setEditingId(null);
+    setForm(emptyWriting());
+  };
+
+  return (
+    <PageFrame
+      title={writingPageLabels[pageKey]}
+      subtitle="タイトル、ステータス、公開日、公開URL、メモを管理します。"
+      query={query}
+      setQuery={setQuery}
+      searchPlaceholder="タイトル、ステータス、URL、メモを検索"
+    >
+      <form className="editor-panel" onSubmit={save}>
+        <FormHeading editing={Boolean(editingId)} editingText="制作メモを編集" newText="制作メモを追加" />
+        <label>
+          タイトル
+          <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
+        </label>
+        <label>
+          ステータス
+          <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as WritingStatus })}>
+            {writingStatuses.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          公開日
+          <input type="date" value={form.publishDate} onChange={(event) => setForm({ ...form, publishDate: event.target.value })} />
+        </label>
+        <label>
+          公開URL
+          <input type="url" value={form.publishUrl} onChange={(event) => setForm({ ...form, publishUrl: event.target.value })} />
+        </label>
+        <label>
+          メモ
+          <textarea value={form.memo} onChange={(event) => setForm({ ...form, memo: event.target.value })} rows={5} />
+        </label>
+        <FormActions editing={Boolean(editingId)} saveText={editingId ? '更新' : '追加'} onCancel={cancel} />
+      </form>
+
+      <div className="list-panel">
+        {filteredItems.length === 0 ? (
+          <EmptyState title="まだ登録がありません" text="候補や下書きを追加すると、ここに一覧で表示されます。" />
+        ) : (
+          filteredItems.map((item) => (
+            <article className="item-card" key={item.id}>
+              <div className="card-header">
+                <div>
+                  <span className={`status-pill status-${item.status}`}>{item.status}</span>
+                  <h3>{item.title || 'タイトル未入力'}</h3>
+                </div>
+                <CardActions onEdit={() => edit(item)} onDelete={() => setItems(items.filter((target) => target.id !== item.id))} />
+              </div>
+              <div className="meta-row">
+                {item.publishDate && <span>公開日 {item.publishDate}</span>}
+                {item.publishUrl && (
+                  <a href={item.publishUrl} target="_blank" rel="noreferrer">
+                    <ExternalLink size={15} aria-hidden="true" />
+                    開く
+                  </a>
+                )}
+              </div>
+              <Detail label="メモ" value={item.memo} />
+            </article>
+          ))
+        )}
+      </div>
+    </PageFrame>
+  );
+}
+
+function PeoplePage({
+  pageKey,
+  items,
+  setItems,
+  query,
+  setQuery,
+}: {
+  pageKey: PeopleKey;
+  items: PersonItem[];
+  setItems: (items: PersonItem[]) => void;
+  query: string;
+  setQuery: (query: string) => void;
+}) {
+  const [form, setForm] = useState<Omit<PersonItem, 'id'>>(emptyPerson);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const filteredItems = filterItems(items, query, (item) => [
+    item.senderName,
+    item.url,
+    item.genre,
+    item.followedAt,
+    item.interestingPoint,
+    item.pointsToImitate,
+    item.learned,
+    item.idea,
+    item.memo,
+  ]);
+
+  const save = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!form.senderName.trim() && !form.url.trim()) return;
+
+    const cleaned = {
+      senderName: form.senderName.trim(),
+      url: form.url.trim(),
+      genre: form.genre.trim(),
+      rating: form.rating,
+      followedAt: form.followedAt,
+      interestingPoint: form.interestingPoint.trim(),
+      pointsToImitate: form.pointsToImitate.trim(),
+      learned: form.learned.trim(),
+      idea: form.idea.trim(),
+      memo: form.memo.trim(),
+    };
+
+    if (editingId) {
+      setItems(items.map((item) => (item.id === editingId ? { ...cleaned, id: editingId } : item)));
+      setEditingId(null);
+    } else {
+      setItems([{ ...cleaned, id: crypto.randomUUID() }, ...items]);
+    }
+    setForm(emptyPerson());
+  };
+
+  const edit = (item: PersonItem) => {
+    setEditingId(item.id);
+    setForm({
+      senderName: item.senderName,
+      url: item.url,
+      genre: item.genre,
+      rating: item.rating,
+      followedAt: item.followedAt,
+      interestingPoint: item.interestingPoint,
+      pointsToImitate: item.pointsToImitate,
+      learned: item.learned,
+      idea: item.idea,
+      memo: item.memo,
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const cancel = () => {
+    setEditingId(null);
+    setForm(emptyPerson());
+  };
+
+  return (
+    <PageFrame
+      title={peoplePageLabels[pageKey]}
+      subtitle="発信者名、URL、ジャンル、評価、観察メモを管理します。"
+      query={query}
+      setQuery={setQuery}
+      searchPlaceholder="発信者名、ジャンル、ポイント、メモを検索"
+    >
+      <form className="editor-panel" onSubmit={save}>
+        <FormHeading editing={Boolean(editingId)} editingText="発信者を編集" newText="発信者を追加" />
+        <label>
+          発信者名
+          <input value={form.senderName} onChange={(event) => setForm({ ...form, senderName: event.target.value })} />
+        </label>
+        <label>
+          URL
+          <input type="url" value={form.url} onChange={(event) => setForm({ ...form, url: event.target.value })} />
+        </label>
+        <label>
+          ジャンル
+          <input value={form.genre} onChange={(event) => setForm({ ...form, genre: event.target.value })} />
+        </label>
+        <div className="field-group">
+          <span>気になる評価</span>
+          <div className="rating-control" role="group" aria-label="気になる評価">
+            {[1, 2, 3].map((rating) => (
+              <button
+                className={form.rating >= rating ? 'selected' : ''}
+                key={rating}
+                type="button"
+                onClick={() => setForm({ ...form, rating: rating as 1 | 2 | 3 })}
+                aria-label={`${rating}つ星`}
+              >
+                <Star size={20} aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        </div>
+        <label>
+          フォロー日
+          <input type="date" value={form.followedAt} onChange={(event) => setForm({ ...form, followedAt: event.target.value })} />
+        </label>
+        <label>
+          気になったポイント
+          <textarea value={form.interestingPoint} onChange={(event) => setForm({ ...form, interestingPoint: event.target.value })} rows={3} />
+        </label>
+        <label>
+          真似したいポイント
+          <textarea value={form.pointsToImitate} onChange={(event) => setForm({ ...form, pointsToImitate: event.target.value })} rows={3} />
+        </label>
+        <label>
+          学んだこと
+          <textarea value={form.learned} onChange={(event) => setForm({ ...form, learned: event.target.value })} rows={3} />
+        </label>
+        <label>
+          アイデア
+          <textarea value={form.idea} onChange={(event) => setForm({ ...form, idea: event.target.value })} rows={3} />
+        </label>
+        <label>
+          メモ
+          <textarea value={form.memo} onChange={(event) => setForm({ ...form, memo: event.target.value })} rows={4} />
+        </label>
+        <FormActions editing={Boolean(editingId)} saveText={editingId ? '更新' : '追加'} onCancel={cancel} />
+      </form>
+
+      <div className="list-panel">
+        {filteredItems.length === 0 ? (
+          <EmptyState title="まだ登録がありません" text="気になる発信者やつながりを追加すると、ここに一覧で表示されます。" />
+        ) : (
+          filteredItems.map((item) => (
+            <article className="item-card" key={item.id}>
+              <div className="card-header">
+                <div>
+                  <div className="stars" aria-label={`評価 ${item.rating}`}>
+                    {Array.from({ length: item.rating }).map((_, index) => (
+                      <Star key={index} size={16} aria-hidden="true" />
+                    ))}
+                  </div>
+                  <h3>{item.senderName || '名前未入力'}</h3>
+                </div>
+                <CardActions onEdit={() => edit(item)} onDelete={() => setItems(items.filter((target) => target.id !== item.id))} />
+              </div>
+              <div className="meta-row">
+                {item.genre && <span>{item.genre}</span>}
+                {item.followedAt && <span>フォロー日 {item.followedAt}</span>}
+                {item.url && (
+                  <a href={item.url} target="_blank" rel="noreferrer">
+                    <ExternalLink size={15} aria-hidden="true" />
+                    開く
+                  </a>
+                )}
+              </div>
+              <Detail label="気になったポイント" value={item.interestingPoint} />
+              <Detail label="真似したいポイント" value={item.pointsToImitate} />
+              <Detail label="学んだこと" value={item.learned} />
+              <Detail label="アイデア" value={item.idea} />
+              <Detail label="メモ" value={item.memo} />
+            </article>
+          ))
+        )}
+      </div>
+    </PageFrame>
+  );
+}
+
+function IdeasPage({
+  items,
+  setItems,
+  query,
+  setQuery,
+}: {
+  items: IdeaItem[];
+  setItems: (items: IdeaItem[]) => void;
+  query: string;
+  setQuery: (query: string) => void;
+}) {
+  const [form, setForm] = useState<Omit<IdeaItem, 'id'>>(emptyIdea);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const filteredItems = filterItems(items, query, (item) => [item.category, item.title, item.memo]);
+
+  const save = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!form.title.trim() && !form.memo.trim()) return;
+    const cleaned = { category: form.category, title: form.title.trim(), memo: form.memo.trim() };
+
+    if (editingId) {
+      setItems(items.map((item) => (item.id === editingId ? { ...cleaned, id: editingId } : item)));
+      setEditingId(null);
+    } else {
+      setItems([{ ...cleaned, id: crypto.randomUUID() }, ...items]);
+    }
+    setForm(emptyIdea());
+  };
+
+  const edit = (item: IdeaItem) => {
+    setEditingId(item.id);
+    setForm({ category: item.category, title: item.title, memo: item.memo });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  return (
+    <PageFrame title="アイデア保管ページ" subtitle="投稿先候補ごとにアイデアを保管します。" query={query} setQuery={setQuery} searchPlaceholder="カテゴリ、タイトル、メモを検索">
+      <form className="editor-panel" onSubmit={save}>
+        <FormHeading editing={Boolean(editingId)} editingText="アイデアを編集" newText="アイデアを追加" />
+        <label>
+          種類
+          <select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value as IdeaCategory })}>
+            {ideaCategories.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          タイトル
+          <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
+        </label>
+        <label>
+          メモ
+          <textarea value={form.memo} onChange={(event) => setForm({ ...form, memo: event.target.value })} rows={6} />
+        </label>
+        <FormActions
+          editing={Boolean(editingId)}
+          saveText={editingId ? '更新' : '追加'}
+          onCancel={() => {
+            setEditingId(null);
+            setForm(emptyIdea());
+          }}
+        />
+      </form>
+
+      <div className="list-panel">
+        {filteredItems.length === 0 ? (
+          <EmptyState title="まだアイデアがありません" text="Threads、note、X、Substackなどの候補をここに置いておけます。" />
+        ) : (
+          filteredItems.map((item) => (
+            <article className="item-card" key={item.id}>
+              <div className="card-header">
+                <div>
+                  <span className="category-pill">{item.category}</span>
+                  <h3>{item.title || 'タイトル未入力'}</h3>
+                </div>
+                <CardActions onEdit={() => edit(item)} onDelete={() => setItems(items.filter((target) => target.id !== item.id))} />
+              </div>
+              <Detail label="メモ" value={item.memo} />
+            </article>
+          ))
+        )}
+      </div>
+    </PageFrame>
+  );
+}
+
+function QuickMemosPage({
+  items,
+  setItems,
+  query,
+  setQuery,
+}: {
+  items: QuickMemoItem[];
+  setItems: (items: QuickMemoItem[]) => void;
+  query: string;
+  setQuery: (query: string) => void;
+}) {
+  const [form, setForm] = useState<Omit<QuickMemoItem, 'id'>>(emptyQuickMemo);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const filteredItems = filterItems(items, query, (item) => [item.title, item.memo, item.createdAt]);
+
+  const save = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!form.title.trim() && !form.memo.trim()) return;
+    const cleaned = { title: form.title.trim(), memo: form.memo.trim(), createdAt: form.createdAt };
+
+    if (editingId) {
+      setItems(items.map((item) => (item.id === editingId ? { ...cleaned, id: editingId } : item)));
+      setEditingId(null);
+    } else {
+      setItems([{ ...cleaned, id: crypto.randomUUID() }, ...items]);
+    }
+    setForm(emptyQuickMemo());
+  };
+
+  const edit = (item: QuickMemoItem) => {
+    setEditingId(item.id);
+    setForm({ title: item.title, memo: item.memo, createdAt: item.createdAt });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  return (
+    <PageFrame title="仮メモページ" subtitle="まだ分類しきれない断片を一時保管します。" query={query} setQuery={setQuery} searchPlaceholder="タイトル、メモを検索">
+      <form className="editor-panel" onSubmit={save}>
+        <FormHeading editing={Boolean(editingId)} editingText="仮メモを編集" newText="仮メモを追加" />
+        <label>
+          タイトル
+          <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} />
+        </label>
+        <label>
+          日付
+          <input type="date" value={form.createdAt} onChange={(event) => setForm({ ...form, createdAt: event.target.value })} />
+        </label>
+        <label>
+          メモ
+          <textarea value={form.memo} onChange={(event) => setForm({ ...form, memo: event.target.value })} rows={7} />
+        </label>
+        <FormActions
+          editing={Boolean(editingId)}
+          saveText={editingId ? '更新' : '追加'}
+          onCancel={() => {
+            setEditingId(null);
+            setForm(emptyQuickMemo());
+          }}
+        />
+      </form>
+
+      <div className="list-panel">
+        {filteredItems.length === 0 ? (
+          <EmptyState title="まだ仮メモがありません" text="あとで整理したい断片をここに置いておけます。" />
+        ) : (
+          filteredItems.map((item) => (
+            <article className="item-card" key={item.id}>
+              <div className="card-header">
+                <div>
+                  <time>{item.createdAt}</time>
+                  <h3>{item.title || 'タイトル未入力'}</h3>
+                </div>
+                <CardActions onEdit={() => edit(item)} onDelete={() => setItems(items.filter((target) => target.id !== item.id))} />
+              </div>
+              <Detail label="メモ" value={item.memo} />
+            </article>
+          ))
+        )}
+      </div>
+    </PageFrame>
+  );
+}
+
+function PageFrame({
+  title,
+  subtitle,
+  query,
+  setQuery,
+  searchPlaceholder,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  query: string;
+  setQuery: (query: string) => void;
+  searchPlaceholder: string;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <div className="page-heading">
+        <div>
+          <h2>{title}</h2>
+          <p>{subtitle}</p>
+        </div>
+        <div className="search-box">
+          <Search size={18} aria-hidden="true" />
+          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={searchPlaceholder} />
+        </div>
+      </div>
+      <div className="workspace">{children}</div>
+    </>
+  );
+}
+
+function FormHeading({ editing, editingText, newText }: { editing: boolean; editingText: string; newText: string }) {
+  return (
+    <div className="form-heading">
+      {editing ? <Pencil size={20} aria-hidden="true" /> : <Plus size={20} aria-hidden="true" />}
+      <h2>{editing ? editingText : newText}</h2>
+    </div>
+  );
+}
+
+function FormActions({ editing, saveText, onCancel }: { editing: boolean; saveText: string; onCancel: () => void }) {
+  return (
+    <div className="form-actions">
+      <button className="primary-button" type="submit">
+        <Save size={18} aria-hidden="true" />
+        {saveText}
+      </button>
+      {editing && (
+        <button className="secondary-button" type="button" onClick={onCancel}>
+          <X size={18} aria-hidden="true" />
+          キャンセル
+        </button>
+      )}
+    </div>
+  );
+}
+
+function CardActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
+  return (
+    <div className="card-actions">
+      <button className="icon-button edit-button" type="button" onClick={onEdit} aria-label="編集">
+        <Pencil size={18} aria-hidden="true" />
+      </button>
+      <button className="icon-button danger-button" type="button" onClick={onDelete} aria-label="削除">
+        <Trash2 size={18} aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
+function SummaryStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="summary-stat">
+      <span>{value}</span>
+      <small>{label}</small>
+    </div>
+  );
+}
+
+function EmptyState({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="empty-state">
+      <h3>{title}</h3>
+      <p>{text}</p>
+    </div>
+  );
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
   if (!value) return null;
 
   return (
@@ -414,14 +915,35 @@ function EntryDetail({ label, value }: { label: string; value: string }) {
   );
 }
 
-function useStoredCreators() {
-  const [creators, setCreators] = useState<Creator[]>(loadCreators);
+function useStoredData() {
+  const [data, setData] = useState<AppData>(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      return raw ? { ...emptyData(), ...(JSON.parse(raw) as AppData) } : emptyData();
+    } catch {
+      return emptyData();
+    }
+  });
 
   useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify(creators));
-  }, [creators]);
+    localStorage.setItem(storageKey, JSON.stringify(data));
+  }, [data]);
 
-  return [creators, setCreators] as const;
+  return [data, setData] as const;
+}
+
+function filterItems<Item>(items: Item[], query: string, collect: (item: Item) => Array<string | number>) {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return items;
+  return items.filter((item) => collect(item).join(' ').toLowerCase().includes(normalizedQuery));
+}
+
+function isWritingPage(page: PageKey): page is WritingKey {
+  return page === 'notes' || page === 'articles' || page === 'substackPosts';
+}
+
+function isPeoplePage(page: PageKey): page is PeopleKey {
+  return page === 'follows' || page === 'followers';
 }
 
 export default App;
