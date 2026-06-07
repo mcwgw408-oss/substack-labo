@@ -351,6 +351,16 @@ textarea:focus {
   color: #8a3f32;
 }
 
+.sort-button {
+  background: #f7f3ef;
+  color: #594a42;
+}
+
+.icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
 .meta-row {
   justify-content: flex-start;
   flex-wrap: wrap;

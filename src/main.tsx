@@ -3,13 +3,15 @@ import type { FormEvent, ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
+  ArrowDown,
+  ArrowUp,
   BookOpenText,
   Edit3,
   ExternalLink,
   FileText,
   Home,
   Lightbulb,
-  Newspaper,
+  Mail,
   Pencil,
   Plus,
   Save,
@@ -24,8 +26,8 @@ import {
 } from 'lucide-react';
 import './styles.css';
 
-type PageKey = 'home' | 'notes' | 'articles' | 'substackPosts' | 'follows' | 'followers' | 'ideas' | 'quickMemos';
-type WritingKey = 'notes' | 'articles' | 'substackPosts';
+type PageKey = 'home' | 'notes' | 'articles' | 'emailList' | 'follows' | 'followers' | 'ideas' | 'quickMemos';
+type WritingKey = 'notes' | 'articles';
 type PeopleKey = 'follows' | 'followers';
 
 type WritingStatus = '候補' | '執筆中' | '予約投稿' | '下書き' | '投稿完了';
@@ -69,9 +71,19 @@ type QuickMemoItem = {
   createdAt: string;
 };
 
+type EmailListItem = {
+  id: string;
+  name: string;
+  email: string;
+  genre: string;
+  acquiredAt: string;
+  memo: string;
+};
+
 type AppData = {
   writings: Record<WritingKey, WritingItem[]>;
   people: Record<PeopleKey, PersonItem[]>;
+  emailList: EmailListItem[];
   ideas: IdeaItem[];
   quickMemos: QuickMemoItem[];
 };
@@ -124,16 +136,24 @@ const emptyQuickMemo = (): Omit<QuickMemoItem, 'id'> => ({
   createdAt: today(),
 });
 
+const emptyEmailListItem = (): Omit<EmailListItem, 'id'> => ({
+  name: '',
+  email: '',
+  genre: '',
+  acquiredAt: today(),
+  memo: '',
+});
+
 const emptyData = (): AppData => ({
   writings: {
     notes: [],
     articles: [],
-    substackPosts: [],
   },
   people: {
     follows: [],
     followers: [],
   },
+  emailList: [],
   ideas: [],
   quickMemos: [],
 });
@@ -142,7 +162,7 @@ const navigationItems: Array<{ key: PageKey; label: string; icon: typeof Home }>
   { key: 'home', label: 'トップ', icon: Home },
   { key: 'notes', label: 'ノート', icon: BookOpenText },
   { key: 'articles', label: '記事', icon: FileText },
-  { key: 'substackPosts', label: 'Substack投稿', icon: Newspaper },
+  { key: 'emailList', label: 'メールリスト', icon: Mail },
   { key: 'follows', label: 'フォロー', icon: UserCheck },
   { key: 'followers', label: 'フォロワー', icon: Users },
   { key: 'ideas', label: 'アイデア保管', icon: Lightbulb },
@@ -152,7 +172,6 @@ const navigationItems: Array<{ key: PageKey; label: string; icon: typeof Home }>
 const writingPageLabels: Record<WritingKey, string> = {
   notes: 'ノートページ',
   articles: '記事ページ',
-  substackPosts: 'Substack投稿ページ',
 };
 
 const getWritingDisplayText = (item: WritingItem, pageKey: WritingKey) => {
@@ -176,6 +195,7 @@ function App() {
     return {
       writingTotal,
       peopleTotal,
+      emailListTotal: data.emailList.length,
       ideaTotal: data.ideas.length,
       quickMemoTotal: data.quickMemos.length,
       completedTotal: Object.values(data.writings)
@@ -247,6 +267,14 @@ function App() {
               }
             />
           )}
+          {activePage === 'emailList' && (
+            <EmailListPage
+              items={data.emailList}
+              query={query}
+              setQuery={setQuery}
+              setItems={(emailList) => setData((current) => ({ ...current, emailList }))}
+            />
+          )}
           {activePage === 'ideas' && (
             <IdeasPage items={data.ideas} query={query} setQuery={setQuery} setItems={(ideas) => setData((current) => ({ ...current, ideas }))} />
           )}
@@ -270,7 +298,7 @@ function HomePage({
   setActivePage,
 }: {
   data: AppData;
-  totals: { writingTotal: number; peopleTotal: number; ideaTotal: number; quickMemoTotal: number; completedTotal: number };
+  totals: { writingTotal: number; peopleTotal: number; emailListTotal: number; ideaTotal: number; quickMemoTotal: number; completedTotal: number };
   setActivePage: (page: PageKey) => void;
 }) {
   const recentWritings = Object.entries(data.writings)
@@ -282,6 +310,7 @@ function HomePage({
       <section className="overview-band">
         <SummaryStat label="制作メモ" value={totals.writingTotal} />
         <SummaryStat label="投稿完了" value={totals.completedTotal} />
+        <SummaryStat label="メールリスト" value={totals.emailListTotal} />
         <SummaryStat label="フォロー/フォロワー" value={totals.peopleTotal} />
         <SummaryStat label="アイデア" value={totals.ideaTotal} />
         <SummaryStat label="仮メモ" value={totals.quickMemoTotal} />
@@ -754,6 +783,161 @@ function IdeasPage({
   );
 }
 
+function EmailListPage({
+  items,
+  setItems,
+  query,
+  setQuery,
+}: {
+  items: EmailListItem[];
+  setItems: (items: EmailListItem[]) => void;
+  query: string;
+  setQuery: (query: string) => void;
+}) {
+  const [form, setForm] = useState<Omit<EmailListItem, 'id'>>(emptyEmailListItem);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const filteredItems = filterItems(items, query, (item) => [item.name, item.email, item.genre, item.acquiredAt, item.memo]);
+
+  const save = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!form.name.trim() && !form.email.trim()) return;
+
+    const cleaned = {
+      name: form.name.trim(),
+      email: form.email.trim(),
+      genre: form.genre.trim(),
+      acquiredAt: form.acquiredAt,
+      memo: form.memo.trim(),
+    };
+
+    if (editingId) {
+      setItems(items.map((item) => (item.id === editingId ? { ...cleaned, id: editingId } : item)));
+      setEditingId(null);
+    } else {
+      setItems([{ ...cleaned, id: crypto.randomUUID() }, ...items]);
+    }
+    setForm(emptyEmailListItem());
+  };
+
+  const edit = (item: EmailListItem) => {
+    setEditingId(item.id);
+    setForm({
+      name: item.name,
+      email: item.email,
+      genre: item.genre,
+      acquiredAt: item.acquiredAt,
+      memo: item.memo,
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const moveItem = (id: string, direction: -1 | 1) => {
+    const currentIndex = items.findIndex((item) => item.id === id);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= items.length) return;
+    const nextItems = [...items];
+    const [movedItem] = nextItems.splice(currentIndex, 1);
+    nextItems.splice(nextIndex, 0, movedItem);
+    setItems(nextItems);
+  };
+
+  const cancel = () => {
+    setEditingId(null);
+    setForm(emptyEmailListItem());
+  };
+
+  return (
+    <PageFrame
+      title="メールリストページ"
+      subtitle="名前、メールアドレス、ジャンル、獲得日、メモを管理します。"
+      query={query}
+      setQuery={setQuery}
+      searchPlaceholder="名前、メールアドレス、ジャンル、メモを検索"
+    >
+      <form className="editor-panel" onSubmit={save}>
+        <FormHeading editing={Boolean(editingId)} editingText="メールリストを編集" newText="メールリストを追加" />
+        <label>
+          名前
+          <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+        </label>
+        <label>
+          メールアドレス
+          <input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
+        </label>
+        <label>
+          ジャンル
+          <input value={form.genre} onChange={(event) => setForm({ ...form, genre: event.target.value })} />
+        </label>
+        <label>
+          獲得日
+          <input type="date" value={form.acquiredAt} onChange={(event) => setForm({ ...form, acquiredAt: event.target.value })} />
+        </label>
+        <label>
+          メモ
+          <textarea value={form.memo} onChange={(event) => setForm({ ...form, memo: event.target.value })} rows={5} />
+        </label>
+        <FormActions editing={Boolean(editingId)} saveText={editingId ? '更新' : '追加'} onCancel={cancel} />
+      </form>
+
+      <div className="list-panel">
+        {filteredItems.length === 0 ? (
+          <EmptyState title="まだメールリストがありません" text="名前やメールアドレスを追加すると、ここに一覧で表示されます。" />
+        ) : (
+          filteredItems.map((item) => {
+            const itemIndex = items.findIndex((target) => target.id === item.id);
+            return (
+              <article className="item-card" key={item.id}>
+                <div className="card-header">
+                  <div>
+                    <span className="category-pill">{item.genre || 'ジャンル未入力'}</span>
+                    <h3>{item.name || '名前未入力'}</h3>
+                  </div>
+                  <div className="card-actions">
+                    <button
+                      className="icon-button sort-button"
+                      type="button"
+                      onClick={() => moveItem(item.id, -1)}
+                      disabled={itemIndex <= 0}
+                      aria-label="上に移動"
+                    >
+                      <ArrowUp size={18} aria-hidden="true" />
+                    </button>
+                    <button
+                      className="icon-button sort-button"
+                      type="button"
+                      onClick={() => moveItem(item.id, 1)}
+                      disabled={itemIndex === -1 || itemIndex >= items.length - 1}
+                      aria-label="下に移動"
+                    >
+                      <ArrowDown size={18} aria-hidden="true" />
+                    </button>
+                    <button className="icon-button edit-button" type="button" onClick={() => edit(item)} aria-label="編集">
+                      <Pencil size={18} aria-hidden="true" />
+                    </button>
+                    <button className="icon-button danger-button" type="button" onClick={() => setItems(items.filter((target) => target.id !== item.id))} aria-label="削除">
+                      <Trash2 size={18} aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+                <div className="meta-row">
+                  {item.email && (
+                    <a href={`mailto:${item.email}`}>
+                      <Mail size={15} aria-hidden="true" />
+                      {item.email}
+                    </a>
+                  )}
+                  {item.acquiredAt && <span>獲得日 {item.acquiredAt}</span>}
+                </div>
+                <Detail label="メモ" value={item.memo} />
+              </article>
+            );
+          })
+        )}
+      </div>
+    </PageFrame>
+  );
+}
+
 function QuickMemosPage({
   items,
   setItems,
@@ -941,7 +1125,7 @@ function useStoredData() {
   const [data, setData] = useState<AppData>(() => {
     try {
       const raw = localStorage.getItem(storageKey);
-      return raw ? { ...emptyData(), ...(JSON.parse(raw) as AppData) } : emptyData();
+      return raw ? normalizeData(JSON.parse(raw) as Partial<AppData>) : emptyData();
     } catch {
       return emptyData();
     }
@@ -954,6 +1138,23 @@ function useStoredData() {
   return [data, setData] as const;
 }
 
+function normalizeData(rawData: Partial<AppData>): AppData {
+  const base = emptyData();
+  return {
+    writings: {
+      notes: rawData.writings?.notes ?? base.writings.notes,
+      articles: rawData.writings?.articles ?? base.writings.articles,
+    },
+    people: {
+      follows: rawData.people?.follows ?? base.people.follows,
+      followers: rawData.people?.followers ?? base.people.followers,
+    },
+    emailList: rawData.emailList ?? base.emailList,
+    ideas: rawData.ideas ?? base.ideas,
+    quickMemos: rawData.quickMemos ?? base.quickMemos,
+  };
+}
+
 function filterItems<Item>(items: Item[], query: string, collect: (item: Item) => Array<string | number>) {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) return items;
@@ -961,7 +1162,7 @@ function filterItems<Item>(items: Item[], query: string, collect: (item: Item) =
 }
 
 function isWritingPage(page: PageKey): page is WritingKey {
-  return page === 'notes' || page === 'articles' || page === 'substackPosts';
+  return page === 'notes' || page === 'articles';
 }
 
 function isPeoplePage(page: PageKey): page is PeopleKey {
