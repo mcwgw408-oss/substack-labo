@@ -50,6 +50,11 @@ type PersonItem = {
   url: string;
   genre: string;
   rating: 1 | 2 | 3;
+  scoreDistribution: string;
+  articleGoal: string;
+  introText: string;
+  cta: string;
+  nextArticle: string;
   followedAt: string;
   interestingPoint: string;
   pointsToImitate: string;
@@ -118,6 +123,11 @@ const emptyPerson = (): Omit<PersonItem, 'id'> => ({
   url: '',
   genre: '',
   rating: 1,
+  scoreDistribution: '',
+  articleGoal: '',
+  introText: '',
+  cta: '',
+  nextArticle: '',
   followedAt: today(),
   interestingPoint: '',
   pointsToImitate: '',
@@ -536,6 +546,11 @@ function PeoplePage({
     item.email,
     item.url,
     item.genre,
+    item.scoreDistribution,
+    item.articleGoal,
+    item.introText,
+    item.cta,
+    item.nextArticle,
     item.followedAt,
     item.interestingPoint,
     item.pointsToImitate,
@@ -554,6 +569,11 @@ function PeoplePage({
       url: form.url.trim(),
       genre: form.genre.trim(),
       rating: form.rating,
+      scoreDistribution: form.scoreDistribution.trim(),
+      articleGoal: form.articleGoal.trim(),
+      introText: form.introText.trim(),
+      cta: form.cta.trim(),
+      nextArticle: form.nextArticle.trim(),
       followedAt: form.followedAt,
       interestingPoint: form.interestingPoint.trim(),
       pointsToImitate: form.pointsToImitate.trim(),
@@ -579,6 +599,11 @@ function PeoplePage({
       url: item.url,
       genre: item.genre,
       rating: item.rating,
+      scoreDistribution: item.scoreDistribution || '',
+      articleGoal: item.articleGoal || '',
+      introText: item.introText || '',
+      cta: item.cta || '',
+      nextArticle: item.nextArticle || '',
       followedAt: item.followedAt,
       interestingPoint: item.interestingPoint,
       pointsToImitate: item.pointsToImitate,
@@ -614,7 +639,7 @@ function PeoplePage({
             <input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
           </label>
         )}
-        <label>
+        <label className={pageKey === 'followers' ? 'compact-field' : undefined}>
           URL
           <input type="url" value={form.url} onChange={(event) => setForm({ ...form, url: event.target.value })} />
         </label>
@@ -638,6 +663,30 @@ function PeoplePage({
             ))}
           </div>
         </div>
+        {pageKey === 'followers' && (
+          <>
+            <label className="wide-field">
+              点数と配分
+              <textarea value={form.scoreDistribution} onChange={(event) => setForm({ ...form, scoreDistribution: event.target.value })} rows={4} />
+            </label>
+            <label className="wide-field">
+              記事の狙い
+              <textarea value={form.articleGoal} onChange={(event) => setForm({ ...form, articleGoal: event.target.value })} rows={4} />
+            </label>
+            <label className="wide-field">
+              導入文
+              <textarea value={form.introText} onChange={(event) => setForm({ ...form, introText: event.target.value })} rows={5} />
+            </label>
+            <label className="wide-field">
+              CTA
+              <textarea value={form.cta} onChange={(event) => setForm({ ...form, cta: event.target.value })} rows={4} />
+            </label>
+            <label className="wide-field">
+              次に書くべき記事
+              <textarea value={form.nextArticle} onChange={(event) => setForm({ ...form, nextArticle: event.target.value })} rows={4} />
+            </label>
+          </>
+        )}
         <label>
           {pageKey === 'followers' ? 'フォロワー日' : 'フォロー日'}
           <input type="date" value={form.followedAt} onChange={(event) => setForm({ ...form, followedAt: event.target.value })} />
@@ -698,6 +747,15 @@ function PeoplePage({
                   </a>
                 )}
               </div>
+              {pageKey === 'followers' && (
+                <>
+                  <Detail label="点数と配分" value={item.scoreDistribution} />
+                  <Detail label="記事の狙い" value={item.articleGoal} />
+                  <Detail label="導入文" value={item.introText} />
+                  <Detail label="CTA" value={item.cta} />
+                  <Detail label="次に書くべき記事" value={item.nextArticle} />
+                </>
+              )}
               <Detail label="気になったポイント" value={item.interestingPoint} />
               <Detail label="真似したいポイント" value={item.pointsToImitate} />
               <Detail label="学んだこと" value={item.learned} />
