@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import {
   ArrowDown,
   ArrowUp,
+  BarChart3,
   BookOpenText,
   Edit3,
   ExternalLink,
@@ -19,6 +20,7 @@ import {
   Send,
   Star,
   StickyNote,
+  TrendingUp,
   Trash2,
   UserCheck,
   Users,
@@ -26,9 +28,21 @@ import {
 } from 'lucide-react';
 import './styles.css';
 
-type PageKey = 'home' | 'notes' | 'articles' | 'emailList' | 'follows' | 'followers' | 'ideas' | 'quickMemos';
+type PageKey = 'home' | 'notes' | 'articles' | 'emailList' | 'follows' | 'followers' | 'articleReviews' | 'ideas' | 'quickMemos';
 type WritingKey = 'notes' | 'articles';
 type PeopleKey = 'follows' | 'followers';
+type ReviewScoreKey =
+  | 'overall'
+  | 'theme'
+  | 'empathy'
+  | 'experience'
+  | 'readability'
+  | 'intro'
+  | 'learning'
+  | 'cta'
+  | 'substackFit'
+  | 'retention'
+  | 'completion';
 
 type WritingStatus = '候補' | '執筆中' | '予約投稿' | '下書き' | '投稿完了';
 type IdeaCategory = 'アイデア保管' | 'Threads候補' | 'note候補（回復期）' | 'note候補（AI実験室）' | 'X候補' | 'Substack候補';
@@ -86,10 +100,17 @@ type EmailListItem = {
   memo: string;
 };
 
+type ArticleReviewItem = {
+  id: string;
+  articleTitle: string;
+  reviewedAt: string;
+} & Record<ReviewScoreKey, number>;
+
 type AppData = {
   writings: Record<WritingKey, WritingItem[]>;
   people: Record<PeopleKey, PersonItem[]>;
   emailList: EmailListItem[];
+  articleReviews: ArticleReviewItem[];
   ideas: IdeaItem[];
   quickMemos: QuickMemoItem[];
 };
@@ -156,6 +177,40 @@ const emptyEmailListItem = (): Omit<EmailListItem, 'id'> => ({
   memo: '',
 });
 
+const reviewScoreLabels: Record<ReviewScoreKey, string> = {
+  overall: '総合点',
+  theme: 'テーマ',
+  empathy: '共感性',
+  experience: '体験談',
+  readability: '読みやすさ',
+  intro: '導入',
+  learning: '学び・気づき',
+  cta: 'CTA',
+  substackFit: 'Substack向きか',
+  retention: '継続して読まれるか',
+  completion: '記事としての完成度',
+};
+
+const reviewScoreKeys = Object.keys(reviewScoreLabels) as ReviewScoreKey[];
+const improvementScoreKeys = reviewScoreKeys.filter((key) => key !== 'overall');
+const growthScoreKeys: ReviewScoreKey[] = ['overall', 'intro', 'cta', 'learning'];
+
+const emptyArticleReview = (): Omit<ArticleReviewItem, 'id'> => ({
+  articleTitle: '',
+  reviewedAt: today(),
+  overall: 0,
+  theme: 0,
+  empathy: 0,
+  experience: 0,
+  readability: 0,
+  intro: 0,
+  learning: 0,
+  cta: 0,
+  substackFit: 0,
+  retention: 0,
+  completion: 0,
+});
+
 const emptyData = (): AppData => ({
   writings: {
     notes: [],
@@ -166,6 +221,7 @@ const emptyData = (): AppData => ({
     followers: [],
   },
   emailList: [],
+  articleReviews: [],
   ideas: [],
   quickMemos: [],
 });
@@ -177,6 +233,7 @@ const navigationItems: Array<{ key: PageKey; label: string; icon: typeof Home }>
   { key: 'emailList', label: 'メールリスト', icon: Mail },
   { key: 'follows', label: 'フォロー', icon: UserCheck },
   { key: 'followers', label: 'フォロワー', icon: Users },
+  { key: 'articleReviews', label: '記事評価', icon: BarChart3 },
   { key: 'ideas', label: 'アイデア保管', icon: Lightbulb },
   { key: 'quickMemos', label: '仮メモ', icon: StickyNote },
 ];
@@ -208,6 +265,7 @@ function App() {
       writingTotal,
       peopleTotal,
       emailListTotal: data.emailList.length,
+      articleReviewTotal: data.articleReviews.length,
       ideaTotal: data.ideas.length,
       quickMemoTotal: data.quickMemos.length,
       completedTotal: Object.values(data.writings)
@@ -287,6 +345,14 @@ function App() {
               setItems={(emailList) => setData((current) => ({ ...current, emailList }))}
             />
           )}
+          {activePage === 'articleReviews' && (
+            <ArticleReviewsPage
+              items={data.articleReviews}
+              query={query}
+              setQuery={setQuery}
+              setItems={(articleReviews) => setData((current) => ({ ...current, articleReviews }))}
+            />
+          )}
           {activePage === 'ideas' && (
             <IdeasPage items={data.ideas} query={query} setQuery={setQuery} setItems={(ideas) => setData((current) => ({ ...current, ideas }))} />
           )}
@@ -310,7 +376,15 @@ function HomePage({
   setActivePage,
 }: {
   data: AppData;
-  totals: { writingTotal: number; peopleTotal: number; emailListTotal: number; ideaTotal: number; quickMemoTotal: number; completedTotal: number };
+  totals: {
+    writingTotal: number;
+    peopleTotal: number;
+    emailListTotal: number;
+    articleReviewTotal: number;
+    ideaTotal: number;
+    quickMemoTotal: number;
+    completedTotal: number;
+  };
   setActivePage: (page: PageKey) => void;
 }) {
   const recentWritings = Object.entries(data.writings)
@@ -324,6 +398,7 @@ function HomePage({
         <SummaryStat label="投稿完了" value={totals.completedTotal} />
         <SummaryStat label="メールリスト" value={totals.emailListTotal} />
         <SummaryStat label="フォロー/フォロワー" value={totals.peopleTotal} />
+        <SummaryStat label="記事評価" value={totals.articleReviewTotal} />
         <SummaryStat label="アイデア" value={totals.ideaTotal} />
         <SummaryStat label="仮メモ" value={totals.quickMemoTotal} />
       </section>
@@ -767,6 +842,257 @@ function PeoplePage({
       </div>
     </PageFrame>
   );
+}
+
+function ArticleReviewsPage({
+  items,
+  setItems,
+  query,
+  setQuery,
+}: {
+  items: ArticleReviewItem[];
+  setItems: (items: ArticleReviewItem[]) => void;
+  query: string;
+  setQuery: (query: string) => void;
+}) {
+  const [form, setForm] = useState<Omit<ArticleReviewItem, 'id'>>(emptyArticleReview);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [sortLowFirst, setSortLowFirst] = useState(true);
+
+  const filteredItems = filterItems(items, query, (item) => [
+    item.articleTitle,
+    item.reviewedAt,
+    ...reviewScoreKeys.map((key) => item[key]),
+  ]).sort((a, b) => b.reviewedAt.localeCompare(a.reviewedAt));
+  const averages = calculateScoreAverages(items);
+
+  const setScore = (key: ReviewScoreKey, value: string) => {
+    setForm({ ...form, [key]: clampScore(Number(value)) });
+  };
+
+  const save = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!form.articleTitle.trim()) return;
+
+    const cleaned = {
+      articleTitle: form.articleTitle.trim(),
+      reviewedAt: form.reviewedAt,
+      ...Object.fromEntries(reviewScoreKeys.map((key) => [key, clampScore(form[key])])),
+    } as Omit<ArticleReviewItem, 'id'>;
+
+    if (editingId) {
+      setItems(items.map((item) => (item.id === editingId ? { ...cleaned, id: editingId } : item)));
+      setEditingId(null);
+    } else {
+      setItems([{ ...cleaned, id: crypto.randomUUID() }, ...items]);
+    }
+    setForm(emptyArticleReview());
+  };
+
+  const edit = (item: ArticleReviewItem) => {
+    setEditingId(item.id);
+    setForm({
+      articleTitle: item.articleTitle,
+      reviewedAt: item.reviewedAt,
+      ...Object.fromEntries(reviewScoreKeys.map((key) => [key, clampScore(item[key])])),
+    } as Omit<ArticleReviewItem, 'id'>);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  return (
+    <PageFrame
+      title="記事評価"
+      subtitle="ChatGPTなどの添削結果を記録し、記事ごとの弱点と成長の流れを確認します。"
+      query={query}
+      setQuery={setQuery}
+      searchPlaceholder="記事タイトル、評価日、点数を検索"
+    >
+      <form className="editor-panel review-editor" onSubmit={save}>
+        <FormHeading editing={Boolean(editingId)} editingText="記事評価を編集" newText="記事評価を追加" />
+        <label>
+          記事タイトル
+          <input value={form.articleTitle} onChange={(event) => setForm({ ...form, articleTitle: event.target.value })} />
+        </label>
+        <label className="compact-field">
+          評価日
+          <input type="date" value={form.reviewedAt} onChange={(event) => setForm({ ...form, reviewedAt: event.target.value })} />
+        </label>
+        <div className="score-input-grid">
+          {reviewScoreKeys.map((key) => (
+            <label key={key}>
+              {reviewScoreLabels[key]}
+              <input type="number" min={0} max={10} step={1} value={form[key]} onChange={(event) => setScore(key, event.target.value)} />
+            </label>
+          ))}
+        </div>
+        <FormActions
+          editing={Boolean(editingId)}
+          saveText={editingId ? '更新' : '追加'}
+          onCancel={() => {
+            setEditingId(null);
+            setForm(emptyArticleReview());
+          }}
+        />
+      </form>
+
+      <div className="list-panel review-list">
+        <section className="growth-panel">
+          <div className="section-title">
+            <TrendingUp size={20} aria-hidden="true" />
+            <h2>成長確認</h2>
+          </div>
+          {items.length === 0 ? (
+            <p className="muted">記事評価を追加すると、総合点・導入・CTA・学びの推移が表示されます。</p>
+          ) : (
+            <>
+              <div className="trend-grid">
+                {growthScoreKeys.map((key) => (
+                  <TrendChart key={key} items={items} scoreKey={key} />
+                ))}
+              </div>
+              <div className="average-grid">
+                {reviewScoreKeys.map((key) => (
+                  <SummaryStat key={key} label={reviewScoreLabels[key]} value={averages[key]} />
+                ))}
+              </div>
+              <GrowthNotes items={items} />
+            </>
+          )}
+        </section>
+
+        <div className="review-toolbar">
+          <div className="section-title">
+            <BarChart3 size={20} aria-hidden="true" />
+            <h2>記事ごとの評価</h2>
+          </div>
+          <button className="secondary-button" type="button" onClick={() => setSortLowFirst((current) => !current)}>
+            {sortLowFirst ? '低い順で表示中' : '入力順で表示中'}
+          </button>
+        </div>
+
+        {filteredItems.length === 0 ? (
+          <EmptyState title="まだ記事評価がありません" text="添削結果を追加すると、弱点トップ3と点数グラフが表示されます。" />
+        ) : (
+          filteredItems.map((item) => (
+            <article className="item-card review-card" key={item.id}>
+              <div className="card-header">
+                <div>
+                  <time>{item.reviewedAt}</time>
+                  <h3>{item.articleTitle}</h3>
+                </div>
+                <CardActions onEdit={() => edit(item)} onDelete={() => setItems(items.filter((target) => target.id !== item.id))} />
+              </div>
+              <div className="meta-row">
+                <span>総合点 {item.overall}点</span>
+              </div>
+              <WeaknessTopThree item={item} />
+              <ReviewScoreBars item={item} sortLowFirst={sortLowFirst} />
+            </article>
+          ))
+        )}
+      </div>
+    </PageFrame>
+  );
+}
+
+function WeaknessTopThree({ item }: { item: ArticleReviewItem }) {
+  const weakness = [...improvementScoreKeys]
+    .sort((a, b) => item[a] - item[b])
+    .slice(0, 3);
+
+  return (
+    <div className="weakness-panel">
+      <strong>弱点トップ3</strong>
+      <div>
+        {weakness.map((key) => (
+          <span key={key}>
+            {reviewScoreLabels[key]} {item[key]}点
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReviewScoreBars({ item, sortLowFirst }: { item: ArticleReviewItem; sortLowFirst: boolean }) {
+  const keys = sortLowFirst ? [...reviewScoreKeys].sort((a, b) => item[a] - item[b]) : reviewScoreKeys;
+
+  return (
+    <div className="score-bars">
+      {keys.map((key) => (
+        <div className="score-bar-row" key={key}>
+          <span>{reviewScoreLabels[key]}</span>
+          <div className="score-track">
+            <div style={{ width: `${item[key] * 10}%` }} />
+          </div>
+          <strong>{item[key]}点</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TrendChart({ items, scoreKey }: { items: ArticleReviewItem[]; scoreKey: ReviewScoreKey }) {
+  const ordered = [...items].sort((a, b) => a.reviewedAt.localeCompare(b.reviewedAt));
+  const points = ordered.map((item, index) => {
+    const x = ordered.length === 1 ? 50 : (index / (ordered.length - 1)) * 100;
+    const y = 100 - item[scoreKey] * 10;
+    return `${x},${y}`;
+  });
+  const latest = ordered[ordered.length - 1]?.[scoreKey] ?? 0;
+
+  return (
+    <div className="trend-card">
+      <div>
+        <strong>{reviewScoreLabels[scoreKey]}</strong>
+        <span>{latest}点</span>
+      </div>
+      <svg viewBox="0 0 100 100" role="img" aria-label={`${reviewScoreLabels[scoreKey]}の推移`}>
+        <polyline points={points.join(' ')} />
+      </svg>
+    </div>
+  );
+}
+
+function GrowthNotes({ items }: { items: ArticleReviewItem[] }) {
+  if (items.length < 2) return null;
+
+  const ordered = [...items].sort((a, b) => a.reviewedAt.localeCompare(b.reviewedAt));
+  const first = ordered[0];
+  const latest = ordered[ordered.length - 1];
+  const notes = growthScoreKeys
+    .map((key) => ({ key, diff: latest[key] - first[key] }))
+    .filter((item) => item.diff > 0)
+    .sort((a, b) => b.diff - a.diff)
+    .slice(0, 3);
+
+  if (notes.length === 0) {
+    return <p className="growth-note">まだ上昇傾向は見えにくいですが、評価を重ねると変化が見えてきます。</p>;
+  }
+
+  return (
+    <div className="growth-note">
+      {notes.map((note) => (
+        <span key={note.key}>
+          {reviewScoreLabels[note.key]}が {note.diff}点アップしています
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function calculateScoreAverages(items: ArticleReviewItem[]): Record<ReviewScoreKey, number> {
+  return Object.fromEntries(
+    reviewScoreKeys.map((key) => [
+      key,
+      items.length === 0 ? 0 : Math.round((items.reduce((sum, item) => sum + item[key], 0) / items.length) * 10) / 10,
+    ]),
+  ) as Record<ReviewScoreKey, number>;
+}
+
+function clampScore(value: number) {
+  if (Number.isNaN(value)) return 0;
+  return Math.min(10, Math.max(0, Math.round(value)));
 }
 
 function IdeasPage({
@@ -1225,6 +1551,7 @@ function normalizeData(rawData: Partial<AppData>): AppData {
       followers: rawData.people?.followers ?? base.people.followers,
     },
     emailList: rawData.emailList ?? base.emailList,
+    articleReviews: rawData.articleReviews ?? base.articleReviews,
     ideas: rawData.ideas ?? base.ideas,
     quickMemos: rawData.quickMemos ?? base.quickMemos,
   };

@@ -273,6 +273,142 @@ textarea {
   max-width: 320px;
 }
 
+.score-input-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.review-list {
+  gap: 18px;
+}
+
+.growth-panel,
+.weakness-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #e2d8ce;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.trend-grid,
+.average-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.average-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.trend-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #e7ddd4;
+  border-radius: 8px;
+  background: #fffdfa;
+}
+
+.trend-card > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.trend-card span {
+  color: #285f5c;
+  font-weight: 900;
+}
+
+.trend-card svg {
+  width: 100%;
+  height: 78px;
+  overflow: visible;
+}
+
+.trend-card polyline {
+  fill: none;
+  stroke: #2f6f6c;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 5;
+}
+
+.growth-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+}
+
+.growth-note span,
+.weakness-panel span {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: #fff7dd;
+  color: #7a540f;
+  font-size: 0.86rem;
+  font-weight: 850;
+}
+
+.weakness-panel > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.review-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.score-bars {
+  display: grid;
+  gap: 9px;
+}
+
+.score-bar-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) minmax(0, 1fr) 48px;
+  align-items: center;
+  gap: 10px;
+}
+
+.score-bar-row span {
+  color: #5c5048;
+  font-size: 0.86rem;
+  font-weight: 850;
+}
+
+.score-bar-row strong {
+  color: #2f2a25;
+  font-size: 0.86rem;
+  text-align: right;
+}
+
+.score-track {
+  height: 14px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #f2ebe4;
+}
+
+.score-track div {
+  height: 100%;
+  border-radius: inherit;
+  background: #2f6f6c;
+}
+
 input:focus,
 select:focus,
 textarea:focus {
@@ -590,6 +726,10 @@ time {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .average-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .quick-links {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -627,5 +767,19 @@ time {
 
   .card-actions {
     justify-content: flex-start;
+  }
+
+  .score-input-grid,
+  .trend-grid,
+  .average-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .score-bar-row {
+    grid-template-columns: 1fr;
+  }
+
+  .score-bar-row strong {
+    text-align: left;
   }
 }
