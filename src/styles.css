@@ -409,6 +409,121 @@ textarea {
   background: #2f6f6c;
 }
 
+.review-history-section,
+.review-history-card {
+  display: grid;
+  gap: 14px;
+}
+
+.review-history-section {
+  padding: 14px;
+  border: 1px solid #e2d8ce;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.review-history-card {
+  padding: 14px;
+  border: 1px solid #e7ddd4;
+  border-radius: 8px;
+  background: #fffdfa;
+}
+
+.review-history-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.review-history-summary div {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid #e7ddd4;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.review-history-summary span {
+  color: #6b5d54;
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.review-history-summary strong {
+  color: #27221e;
+  font-size: 1.08rem;
+}
+
+.overall-history-chart {
+  height: 168px;
+  padding: 12px;
+  border: 1px solid #dce8e6;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #f7fbfa 0%, #ffffff 100%);
+}
+
+.overall-history-chart svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.overall-history-chart line {
+  stroke: rgba(47, 111, 108, 0.14);
+  stroke-width: 0.7;
+}
+
+.overall-history-chart polyline {
+  fill: none;
+  stroke: #2f6f6c;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4;
+}
+
+.overall-history-chart circle {
+  fill: #ffffff;
+  stroke: #2f6f6c;
+  stroke-width: 2.2;
+}
+
+.overall-history-chart text {
+  fill: #285f5c;
+  font-size: 7px;
+  font-weight: 900;
+}
+
+.review-history-list {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.review-history-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.review-history-list li > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.review-history-list span {
+  color: #285f5c;
+  font-weight: 900;
+}
+
 input:focus,
 select:focus,
 textarea:focus {
@@ -771,11 +886,13 @@ time {
 
   .score-input-grid,
   .trend-grid,
-  .average-grid {
+  .average-grid,
+  .review-history-summary {
     grid-template-columns: 1fr;
   }
 
-  .score-bar-row {
+  .score-bar-row,
+  .review-history-list li {
     grid-template-columns: 1fr;
   }
 

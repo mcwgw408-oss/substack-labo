@@ -106,6 +106,11 @@ type ArticleReviewItem = {
   reviewedAt: string;
 } & Record<ReviewScoreKey, number>;
 
+type ArticleReviewGroup = {
+  title: string;
+  history: ArticleReviewItem[];
+};
+
 type AppData = {
   writings: Record<WritingKey, WritingItem[]>;
   people: Record<PeopleKey, PersonItem[]>;
@@ -864,6 +869,7 @@ function ArticleReviewsPage({
     item.reviewedAt,
     ...reviewScoreKeys.map((key) => item[key]),
   ]).sort((a, b) => b.reviewedAt.localeCompare(a.reviewedAt));
+  const reviewGroups = groupArticleReviews(filteredItems);
   const averages = calculateScoreAverages(items);
 
   const setScore = (key: ReviewScoreKey, value: string) => {
@@ -977,6 +983,23 @@ function ArticleReviewsPage({
           </button>
         </div>
 
+        {reviewGroups.length > 0 && (
+          <section className="review-history-section">
+            <div className="section-title">
+              <TrendingUp size={20} aria-hidden="true" />
+              <h2>評価履歴一覧</h2>
+            </div>
+            {reviewGroups.map((group) => (
+              <ArticleReviewHistoryCard
+                group={group}
+                key={group.title}
+                onDelete={(id) => setItems(items.filter((target) => target.id !== id))}
+                onEdit={edit}
+              />
+            ))}
+          </section>
+        )}
+
         {filteredItems.length === 0 ? (
           <EmptyState title="まだ記事評価がありません" text="添削結果を追加すると、弱点トップ3と点数グラフが表示されます。" />
         ) : (
@@ -999,6 +1022,99 @@ function ArticleReviewsPage({
         )}
       </div>
     </PageFrame>
+  );
+}
+
+function ArticleReviewHistoryCard({
+  group,
+  onDelete,
+  onEdit,
+}: {
+  group: ArticleReviewGroup;
+  onDelete: (id: string) => void;
+  onEdit: (item: ArticleReviewItem) => void;
+}) {
+  const history = [...group.history].sort((a, b) => a.reviewedAt.localeCompare(b.reviewedAt));
+  const first = history[0];
+  const latest = history[history.length - 1];
+  const highest = Math.max(...history.map((item) => item.overall));
+  const improvement = latest.overall - first.overall;
+
+  return (
+    <article className="review-history-card">
+      <div className="card-header">
+        <div>
+          <time>{first.reviewedAt} - {latest.reviewedAt}</time>
+          <h3>{group.title}</h3>
+        </div>
+      </div>
+
+      <div className="review-history-summary">
+        <div>
+          <span>評価回数</span>
+          <strong>{history.length}回</strong>
+        </div>
+        <div>
+          <span>最高点</span>
+          <strong>{highest}点</strong>
+        </div>
+        <div>
+          <span>改善幅</span>
+          <strong>
+            {first.overall}→{latest.overall}、{improvement >= 0 ? '+' : ''}{improvement}点
+          </strong>
+        </div>
+      </div>
+
+      <OverallHistoryChart history={history} />
+
+      <ol className="review-history-list">
+        {history.map((item, index) => (
+          <li key={item.id}>
+            <div>
+              <span>{index + 1}回目</span>
+              <time>{item.reviewedAt}</time>
+            </div>
+            <strong>{item.overall}点</strong>
+            <div className="card-actions">
+              <button className="icon-button edit-button" type="button" onClick={() => onEdit(item)} aria-label={`${index + 1}回目評価を編集`}>
+                <Edit3 size={17} />
+              </button>
+              <button className="icon-button danger-button" type="button" onClick={() => onDelete(item.id)} aria-label={`${index + 1}回目評価を削除`}>
+                <Trash2 size={17} />
+              </button>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </article>
+  );
+}
+
+function OverallHistoryChart({ history }: { history: ArticleReviewItem[] }) {
+  const points = history.map((item, index) => {
+    const x = history.length === 1 ? 50 : (index / (history.length - 1)) * 100;
+    const y = 100 - item.overall;
+    return { item, x, y };
+  });
+
+  return (
+    <div className="overall-history-chart" aria-label="点数の推移グラフ">
+      <svg viewBox="0 0 100 100" role="img">
+        <line x1="0" x2="100" y1="25" y2="25" />
+        <line x1="0" x2="100" y1="50" y2="50" />
+        <line x1="0" x2="100" y1="75" y2="75" />
+        {points.length > 1 && <polyline points={points.map((point) => `${point.x},${point.y}`).join(' ')} />}
+        {points.map((point) => (
+          <g key={point.item.id}>
+            <circle cx={point.x} cy={point.y} r="3" />
+            <text x={point.x} y={Math.max(8, point.y - 7)} textAnchor="middle">
+              {point.item.overall}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </div>
   );
 }
 
@@ -1095,6 +1211,30 @@ function calculateScoreAverages(items: ArticleReviewItem[]): Record<ReviewScoreK
       items.length === 0 ? 0 : Math.round((items.reduce((sum, item) => sum + item[key], 0) / items.length) * 10) / 10,
     ]),
   ) as Record<ReviewScoreKey, number>;
+}
+
+function groupArticleReviews(items: ArticleReviewItem[]): ArticleReviewGroup[] {
+  const groups = new Map<string, ArticleReviewItem[]>();
+
+  items.forEach((item) => {
+    const title = normalizeArticleTitle(item.articleTitle);
+    groups.set(title, [...(groups.get(title) ?? []), item]);
+  });
+
+  return Array.from(groups.entries())
+    .map(([title, history]) => ({
+      title,
+      history: history.sort((a, b) => a.reviewedAt.localeCompare(b.reviewedAt)),
+    }))
+    .sort((a, b) => {
+      const latestA = a.history[a.history.length - 1]?.reviewedAt ?? '';
+      const latestB = b.history[b.history.length - 1]?.reviewedAt ?? '';
+      return latestB.localeCompare(latestA);
+    });
+}
+
+function normalizeArticleTitle(title: string) {
+  return title.trim().replace(/\s+/g, ' ') || '無題の記事';
 }
 
 function getScoreMax(key: ReviewScoreKey) {
