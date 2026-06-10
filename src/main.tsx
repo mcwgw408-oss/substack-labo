@@ -867,7 +867,7 @@ function ArticleReviewsPage({
   const averages = calculateScoreAverages(items);
 
   const setScore = (key: ReviewScoreKey, value: string) => {
-    setForm({ ...form, [key]: clampScore(Number(value)) });
+    setForm({ ...form, [key]: clampScore(key, Number(value)) });
   };
 
   const save = (event: FormEvent<HTMLFormElement>) => {
@@ -877,7 +877,7 @@ function ArticleReviewsPage({
     const cleaned = {
       articleTitle: form.articleTitle.trim(),
       reviewedAt: form.reviewedAt,
-      ...Object.fromEntries(reviewScoreKeys.map((key) => [key, clampScore(form[key])])),
+      ...Object.fromEntries(reviewScoreKeys.map((key) => [key, clampScore(key, form[key])])),
     } as Omit<ArticleReviewItem, 'id'>;
 
     if (editingId) {
@@ -894,7 +894,7 @@ function ArticleReviewsPage({
     setForm({
       articleTitle: item.articleTitle,
       reviewedAt: item.reviewedAt,
-      ...Object.fromEntries(reviewScoreKeys.map((key) => [key, clampScore(item[key])])),
+      ...Object.fromEntries(reviewScoreKeys.map((key) => [key, clampScore(key, item[key])])),
     } as Omit<ArticleReviewItem, 'id'>);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -921,7 +921,14 @@ function ArticleReviewsPage({
           {reviewScoreKeys.map((key) => (
             <label key={key}>
               {reviewScoreLabels[key]}
-              <input type="number" min={0} max={10} step={1} value={form[key]} onChange={(event) => setScore(key, event.target.value)} />
+              <input
+                type="number"
+                min={0}
+                max={getScoreMax(key)}
+                step={1}
+                value={form[key]}
+                onChange={(event) => setScore(key, event.target.value)}
+              />
             </label>
           ))}
         </div>
@@ -1023,7 +1030,7 @@ function ReviewScoreBars({ item, sortLowFirst }: { item: ArticleReviewItem; sort
         <div className="score-bar-row" key={key}>
           <span>{reviewScoreLabels[key]}</span>
           <div className="score-track">
-            <div style={{ width: `${item[key] * 10}%` }} />
+            <div style={{ width: `${(item[key] / getScoreMax(key)) * 100}%` }} />
           </div>
           <strong>{item[key]}点</strong>
         </div>
@@ -1036,7 +1043,7 @@ function TrendChart({ items, scoreKey }: { items: ArticleReviewItem[]; scoreKey:
   const ordered = [...items].sort((a, b) => a.reviewedAt.localeCompare(b.reviewedAt));
   const points = ordered.map((item, index) => {
     const x = ordered.length === 1 ? 50 : (index / (ordered.length - 1)) * 100;
-    const y = 100 - item[scoreKey] * 10;
+    const y = 100 - (item[scoreKey] / getScoreMax(scoreKey)) * 100;
     return `${x},${y}`;
   });
   const latest = ordered[ordered.length - 1]?.[scoreKey] ?? 0;
@@ -1090,9 +1097,13 @@ function calculateScoreAverages(items: ArticleReviewItem[]): Record<ReviewScoreK
   ) as Record<ReviewScoreKey, number>;
 }
 
-function clampScore(value: number) {
+function getScoreMax(key: ReviewScoreKey) {
+  return key === 'overall' ? 100 : 10;
+}
+
+function clampScore(key: ReviewScoreKey, value: number) {
   if (Number.isNaN(value)) return 0;
-  return Math.min(10, Math.max(0, Math.round(value)));
+  return Math.min(getScoreMax(key), Math.max(0, Math.round(value)));
 }
 
 function IdeasPage({
