@@ -46,6 +46,7 @@ type WritingItem = {
 type PersonItem = {
   id: string;
   senderName: string;
+  email: string;
   url: string;
   genre: string;
   rating: 1 | 2 | 3;
@@ -113,6 +114,7 @@ const emptyWriting = (): Omit<WritingItem, 'id'> => ({
 
 const emptyPerson = (): Omit<PersonItem, 'id'> => ({
   senderName: '',
+  email: '',
   url: '',
   genre: '',
   rating: 1,
@@ -531,6 +533,7 @@ function PeoplePage({
 
   const filteredItems = filterItems(items, query, (item) => [
     item.senderName,
+    item.email,
     item.url,
     item.genre,
     item.followedAt,
@@ -543,10 +546,11 @@ function PeoplePage({
 
   const save = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!form.senderName.trim() && !form.url.trim()) return;
+    if (!form.senderName.trim() && !form.url.trim() && !form.email.trim()) return;
 
     const cleaned = {
       senderName: form.senderName.trim(),
+      email: form.email.trim(),
       url: form.url.trim(),
       genre: form.genre.trim(),
       rating: form.rating,
@@ -571,6 +575,7 @@ function PeoplePage({
     setEditingId(item.id);
     setForm({
       senderName: item.senderName,
+      email: item.email || '',
       url: item.url,
       genre: item.genre,
       rating: item.rating,
@@ -603,6 +608,12 @@ function PeoplePage({
           発信者名
           <input value={form.senderName} onChange={(event) => setForm({ ...form, senderName: event.target.value })} />
         </label>
+        {pageKey === 'followers' && (
+          <label>
+            メールアドレス
+            <input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
+          </label>
+        )}
         <label>
           URL
           <input type="url" value={form.url} onChange={(event) => setForm({ ...form, url: event.target.value })} />
@@ -673,6 +684,12 @@ function PeoplePage({
               </div>
               <div className="meta-row">
                 {item.genre && <span>{item.genre}</span>}
+                {pageKey === 'followers' && item.email && (
+                  <a href={`mailto:${item.email}`}>
+                    <Mail size={15} aria-hidden="true" />
+                    {item.email}
+                  </a>
+                )}
                 {item.followedAt && <span>{pageKey === 'followers' ? 'フォロワー日' : 'フォロー日'} {item.followedAt}</span>}
                 {item.url && (
                   <a href={item.url} target="_blank" rel="noreferrer">
