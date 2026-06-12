@@ -200,20 +200,17 @@ const reviewScoreKeys = Object.keys(reviewScoreLabels) as ReviewScoreKey[];
 const improvementScoreKeys = reviewScoreKeys.filter((key) => key !== 'overall');
 const growthScoreKeys: ReviewScoreKey[] = ['overall', 'intro', 'cta', 'learning'];
 
-const emptyArticleReview = (): Omit<ArticleReviewItem, 'id'> => ({
+// 入力フォーム専用の状態。点数を文字列で持つことで自由に手入力できる。
+// 保存時に数値へ変換するため、localStorageのデータ構造（数値）は変わらない。
+type ReviewFormState = {
+  articleTitle: string;
+  reviewedAt: string;
+} & Record<ReviewScoreKey, string>;
+
+const emptyReviewForm = (): ReviewFormState => ({
   articleTitle: '',
   reviewedAt: today(),
-  overall: 0,
-  theme: 0,
-  empathy: 0,
-  experience: 0,
-  readability: 0,
-  intro: 0,
-  learning: 0,
-  cta: 0,
-  substackFit: 0,
-  retention: 0,
-  completion: 0,
+  ...(Object.fromEntries(reviewScoreKeys.map((key) => [key, ''])) as Record<ReviewScoreKey, string>),
 });
 
 const emptyData = (): AppData => ({
@@ -860,20 +857,28 @@ function ArticleReviewsPage({
   query: string;
   setQuery: (query: string) => void;
 }) {
-  const [form, setForm] = useState<Omit<ArticleReviewItem, 'id'>>(emptyArticleReview);
+  const [form, setForm] = useState<ReviewFormState>(emptyReviewForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [sortLowFirst, setSortLowFirst] = useState(true);
+
+  // 記録順の控え。新しい記録ほど配列の先頭にあるため、
+  // 同じ評価日でも「先に記録したもの＝1回目」が判別できる。
+  const orderIndex = new Map(items.map((item, index) => [item.id, index]));
+  const byTimelineAsc = (a: ArticleReviewItem, b: ArticleReviewItem) =>
+    a.reviewedAt.localeCompare(b.reviewedAt) ||
+    (orderIndex.get(b.id) ?? 0) - (orderIndex.get(a.id) ?? 0);
 
   const filteredItems = filterItems(items, query, (item) => [
     item.articleTitle,
     item.reviewedAt,
     ...reviewScoreKeys.map((key) => item[key]),
-  ]).sort((a, b) => b.reviewedAt.localeCompare(a.reviewedAt));
-  const reviewGroups = groupArticleReviews(filteredItems);
+  ]).sort((a, b) => byTimelineAsc(b, a));
+  const reviewGroups = groupArticleReviews([...filteredItems].sort(byTimelineAsc));
+  const timelineItems = [...items].sort(byTimelineAsc);
   const averages = calculateScoreAverages(items);
 
   const setScore = (key: ReviewScoreKey, value: string) => {
-    setForm({ ...form, [key]: clampScore(key, Number(value)) });
+    setForm({ ...form, [key]: value.replace(/[^0-9]/g, '') });
   };
 
   const save = (event: FormEvent<HTMLFormElement>) => {
@@ -883,7 +888,9 @@ function ArticleReviewsPage({
     const cleaned = {
       articleTitle: form.articleTitle.trim(),
       reviewedAt: form.reviewedAt,
-      ...Object.fromEntries(reviewScoreKeys.map((key) => [key, clampScore(key, form[key])])),
+      ...Object.fromEntries(
+        reviewScoreKeys.map((key) => [key, clampScore(key, form[key] === '' ? 0 : Number(form[key]))])
+      ),
     } as Omit<ArticleReviewItem, 'id'>;
 
     if (editingId) {
@@ -892,7 +899,7 @@ function ArticleReviewsPage({
     } else {
       setItems([{ ...cleaned, id: crypto.randomUUID() }, ...items]);
     }
-    setForm(emptyArticleReview());
+    setForm(emptyReviewForm());
   };
 
   const edit = (item: ArticleReviewItem) => {
@@ -900,8 +907,8 @@ function ArticleReviewsPage({
     setForm({
       articleTitle: item.articleTitle,
       reviewedAt: item.reviewedAt,
-      ...Object.fromEntries(reviewScoreKeys.map((key) => [key, clampScore(key, item[key])])),
-    } as Omit<ArticleReviewItem, 'id'>);
+      ...Object.fromEntries(reviewScoreKeys.map((key) => [key, String(clampScore(key, item[key]))])),
+    } as ReviewFormState);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -928,10 +935,9 @@ function ArticleReviewsPage({
             <label key={key}>
               {reviewScoreLabels[key]}
               <input
-                type="number"
-                min={0}
-                max={getScoreMax(key)}
-                step={1}
+                type="text"
+                inputMode="numeric"
+                placeholder={`0〜${getScoreMax(key)}`}
                 value={form[key]}
                 onChange={(event) => setScore(key, event.target.value)}
               />
@@ -943,7 +949,7 @@ function ArticleReviewsPage({
           saveText={editingId ? '更新' : '追加'}
           onCancel={() => {
             setEditingId(null);
-            setForm(emptyArticleReview());
+            setForm(emptyReviewForm());
           }}
         />
       </form>
@@ -960,7 +966,7 @@ function ArticleReviewsPage({
             <>
               <div className="trend-grid">
                 {growthScoreKeys.map((key) => (
-                  <TrendChart key={key} items={items} scoreKey={key} />
+                  <TrendChart key={key} items={timelineItems} scoreKey={key} />
                 ))}
               </div>
               <div className="average-grid">
@@ -968,7 +974,7 @@ function ArticleReviewsPage({
                   <SummaryStat key={key} label={reviewScoreLabels[key]} value={averages[key]} />
                 ))}
               </div>
-              <GrowthNotes items={items} />
+              <GrowthNotes items={timelineItems} />
             </>
           )}
         </section>
